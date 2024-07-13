@@ -18,6 +18,7 @@ class Scenario(BaseScenario):
         self.food_radius = kwargs.pop("food_radius", 0.05)
         self.pos_range = kwargs.pop("pos_range", 1.0)
         n_food = kwargs.pop("n_food", n_agents)
+        self.obs_agents = kwargs.pop("obs_agents", False)  # New parameter
         ScenarioUtils.check_kwargs_consumed(kwargs)
 
         # Make world
@@ -145,6 +146,14 @@ class Scenario(BaseScenario):
                     dim=-1,
                 )
             )
+        
+        # Add observations of other agents if obs_agents is True
+        if self.obs_agents:
+            for other in self.world.agents:
+                if other != agent:
+                    obs.append(other.state.pos - agent.state.pos)
+                    obs.append(other.state.vel)
+
         return torch.cat(
             [agent.state.pos, agent.state.vel, *obs],
             dim=-1,
@@ -166,5 +175,6 @@ if __name__ == "__main__":
         control_two_agents=True,
         n_agents=4,
         share_reward=False,
-        penalise_by_tim=False,
+        penalise_by_time=False,
+        obs_agents=False,  # Add this parameter
     )
