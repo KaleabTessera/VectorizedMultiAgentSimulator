@@ -37,7 +37,14 @@ class Scenario(BaseScenario):
         self.final_reward = kwargs.pop("final_reward", 0.01)
 
         self.agent_collision_penalty = kwargs.pop("agent_collision_penalty", -1)
+
+        self._use_sparse_rewards = kwargs.pop("use_sparse_rewards", False)
         ScenarioUtils.check_kwargs_consumed(kwargs)
+
+        if self._use_sparse_rewards:
+            self.agent_reward = self.agent_reward_sparse
+        else:
+            self.agent_reward = self.agent_reward_dense 
 
         self.min_distance_between_entities = self.agent_radius * 2 + 0.05
         self.world_semidim = 1
@@ -207,7 +214,8 @@ class Scenario(BaseScenario):
         pos_reward = self.pos_rew if self.shared_rew else agent.pos_rew
         return pos_reward + self.final_rew + agent.agent_collision_rew
 
-    def agent_reward(self, agent: Agent):
+    def agent_reward_dense(self, agent: Agent):
+        # usual dense reward for navigation
         agent.distance_to_goal = torch.linalg.vector_norm(
             agent.state.pos - agent.goal.state.pos,
             dim=-1,
@@ -218,6 +226,21 @@ class Scenario(BaseScenario):
         agent.pos_rew = agent.pos_shaping - pos_shaping
         agent.pos_shaping = pos_shaping
         return agent.pos_rew
+        
+    def agent_reward_sparse(self, agent: Agent):
+        # Still need to calculate distance and on_goal for done condition
+        agent.distance_to_goal = torch.linalg.vector_norm(
+            agent.state.pos - agent.goal.state.pos,
+            dim=-1,
+        )
+        agent.on_goal = agent.distance_to_goal < agent.goal.shape.radius
+        
+        # Sparse reward: 1 only when on goal, 0 otherwise
+        agent.pos_rew = torch.where(agent.on_goal, 
+                                torch.ones_like(agent.distance_to_goal), 
+                                torch.zeros_like(agent.distance_to_goal))
+        return agent.pos_rew
+            
 
     def observation(self, agent: Agent):
         goal_poses = []
