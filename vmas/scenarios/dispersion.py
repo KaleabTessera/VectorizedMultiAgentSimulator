@@ -19,6 +19,8 @@ class Scenario(BaseScenario):
         self.pos_range = kwargs.pop("pos_range", 1.0)
         n_food = kwargs.pop("n_food", n_agents)
         self.obs_agents = kwargs.pop("obs_agents", False)  # New parameter
+        # default is True - use sparse rewards as original dispersion scenario
+        self._use_sparse_rewards = kwargs.pop("use_sparse_rewards", True)
         ScenarioUtils.check_kwargs_consumed(kwargs)
 
         # Make world
@@ -87,12 +89,34 @@ class Scenario(BaseScenario):
                 landmark.eaten[env_index] = False
                 landmark.just_eaten[env_index] = False
                 landmark.is_rendering[env_index] = True
+            
 
     def reward(self, agent: Agent):
+        # default reward from dispersion scenario
         is_first = agent == self.world.agents[0]
         is_last = agent == self.world.agents[-1]
 
         rews = torch.zeros(self.world.batch_dim, device=self.world.device)
+                    
+        # Dense rewards based on this agent's distance
+        if not self._use_sparse_rewards:
+            # Initialize shaping if not exists
+            if not hasattr(agent, 'pos_shaping'):
+                agent.pos_shaping = torch.zeros(self.world.batch_dim, device=self.world.device)
+                
+            for landmark in self.world.landmarks:
+                if not landmark.eaten.any():  # Only consider uneaten food
+                    # Calculate this agent's distance to landmark
+                    agent_distance = torch.linalg.vector_norm(
+                        agent.state.pos - landmark.state.pos, dim=1
+                    )
+                    # Potential-based shaping
+                    pos_shaping_factor = 1.0  # Scale factor can be adjusted
+                    pos_shaping = agent_distance * pos_shaping_factor
+                    pos_rew = agent.pos_shaping - pos_shaping
+                    agent.pos_shaping = pos_shaping.clone()
+                    
+                    rews += pos_rew  # Add shaping reward (positive when getting closer)
 
         for landmark in self.world.landmarks:
             if is_first:
