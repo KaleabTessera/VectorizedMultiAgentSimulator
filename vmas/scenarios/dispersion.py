@@ -111,12 +111,13 @@ class Scenario(BaseScenario):
                         agent.state.pos - landmark.state.pos, dim=1
                     )
                     # Potential-based shaping
-                    pos_shaping_factor = 1.0  # Scale factor can be adjusted
+                    pos_shaping_factor = 0.5  # Scale factor can be adjusted
                     pos_shaping = agent_distance * pos_shaping_factor
                     pos_rew = agent.pos_shaping - pos_shaping
                     agent.pos_shaping = pos_shaping.clone()
                     
-                    rews += pos_rew  # Add shaping reward (positive when getting closer)
+                    # average across landmarks instead of summing:
+                    rews += pos_rew / len(self.world.landmarks)
 
         for landmark in self.world.landmarks:
             if is_first:
