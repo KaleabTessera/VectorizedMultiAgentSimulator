@@ -147,10 +147,29 @@ class Scenario(BaseScenario):
 
         self.pos_rew = torch.zeros(batch_dim, device=device)
         self.final_rew = self.pos_rew.clone()
+        
+        self.reached_goals = None  # Will be initialized in reset_world_at
 
         return world
 
     def reset_world_at(self, env_index: int = None):
+        
+        # To main which goals have been reached
+        if env_index is None:
+            self.reached_goals = torch.zeros(
+                (self.world.batch_dim, self.n_agents), 
+                dtype=torch.bool, 
+                device=self.world.device
+            )
+        else:
+            if self.reached_goals is None:
+                self.reached_goals = torch.zeros(
+                    (self.world.batch_dim, self.n_agents), 
+                    dtype=torch.bool, 
+                    device=self.world.device
+                )
+            self.reached_goals[env_index] = False
+            
         ScenarioUtils.spawn_entities_randomly(
             self.world.agents,
             self.world,
@@ -221,6 +240,15 @@ class Scenario(BaseScenario):
 
             self.final_rew[self.all_goal_reached] = self.final_reward
 
+            if self._use_sparse_rewards:
+                # Sparse reward for reaching goal, only first time you reach it. 
+                current_on_goal = torch.stack([a.on_goal for a in self.world.agents], dim=-1)
+                newly_reached = current_on_goal & ~self.reached_goals
+                self.reached_goals = self.reached_goals | current_on_goal
+                sparse_reward_reaching_goal = torch.sum(newly_reached, dim=-1)
+                self.final_rew += sparse_reward_reaching_goal
+                
+
             for i, a in enumerate(self.world.agents):
                 for j, b in enumerate(self.world.agents):
                     if i <= j:
@@ -258,10 +286,8 @@ class Scenario(BaseScenario):
         )
         agent.on_goal = agent.distance_to_goal < agent.goal.shape.radius
         
-        # Sparse reward: 1 only when on goal, 0 otherwise
-        agent.pos_rew = torch.where(agent.on_goal, 
-                                torch.ones_like(agent.distance_to_goal), 
-                                torch.zeros_like(agent.distance_to_goal))
+        # no shaping for sparse reward
+        agent.pos_rew = torch.zeros_like(agent.distance_to_goal)
         return agent.pos_rew
             
 
