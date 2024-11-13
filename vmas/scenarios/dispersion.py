@@ -21,6 +21,7 @@ class Scenario(BaseScenario):
         self.obs_agents = kwargs.pop("obs_agents", False)  # New parameter
         # default is True - use sparse rewards as original dispersion scenario
         self._use_sparse_rewards = kwargs.pop("use_sparse_rewards", True)
+        self.pos_shaping_factor = kwargs.pop("pos_shaping_factor", 1)
         ScenarioUtils.check_kwargs_consumed(kwargs)
 
         # Make world
@@ -111,12 +112,11 @@ class Scenario(BaseScenario):
                         agent.state.pos - landmark.state.pos, dim=1
                     )
                     # Potential-based shaping
-                    pos_shaping_factor = 0.5  # Scale factor can be adjusted
-                    pos_shaping = agent_distance * pos_shaping_factor
+                    pos_shaping = agent_distance * self.pos_shaping_factor
                     pos_rew = agent.pos_shaping - pos_shaping
                     agent.pos_shaping = pos_shaping.clone()
                     
-                    # average across landmarks instead of summing:
+                    # + avg distance to all landmarks
                     rews += pos_rew / len(self.world.landmarks)
 
         for landmark in self.world.landmarks:
